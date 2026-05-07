@@ -1,0 +1,13 @@
+{
+  "functions": {
+    "api/**/*.go": {
+      "runtime": "vercel-go@3.x"
+    }
+  },
+  "routes": [
+    { "src": "/api/admin/set-pro", "dest": "/api/admin/set_pro.go" },
+    { "src": "/api/register",      "dest": "/api/register.go" },
+    { "src": "/api/login",         "dest": "/api/login.go" },
+    { "src": "/api/me",            "dest": "/api/me.go" }
+  ]
+}
