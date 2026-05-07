@@ -1,0 +1,5 @@
+server:
+  port: 8080
+
+jwt_secret: "I1XiD{cSv(A?Gbi!"
+admin_key: "I_>f%5pc^(mC7d[Q"

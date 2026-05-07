@@ -3,12 +3,14 @@ package main
 import (
 	"database/sql"
 	"errors"
+	"fmt"
 	"net/http"
 	"os"
 	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/goccy/go-yaml"
 	"github.com/golang-jwt/jwt/v5"
 	_ "github.com/mattn/go-sqlite3"
 	"golang.org/x/crypto/bcrypt"
@@ -16,15 +18,38 @@ import (
 
 // ── 配置 ─────────────────────────────────────────────────────
 
-var jwtSecret = []byte(getEnv("JWT_SECRET", "change-me-in-production"))
-var adminKey = getEnv("ADMIN_KEY", "admin-secret")
-
-func getEnv(key, fallback string) string {
-	if v := os.Getenv(key); v != "" {
-		return v
-	}
-	return fallback
+type Config struct {
+	Server struct {
+		Port int `yaml:"port"`
+	} `yaml:"server"`
+	JWTSecret string `yaml:"jwt_secret"`
+	AdminKey  string `yaml:"admin_key"`
 }
+
+var cfg Config
+
+func loadConfig(path string) {
+	f, err := os.Open(path)
+	if err != nil {
+		panic("无法打开配置文件 " + path + ": " + err.Error())
+	}
+	defer f.Close()
+	if err := yaml.NewDecoder(f).Decode(&cfg); err != nil {
+		panic("配置文件解析失败: " + err.Error())
+	}
+	if cfg.JWTSecret == "" {
+		panic("config.yaml 中 jwt_secret 不能为空")
+	}
+	if cfg.AdminKey == "" {
+		panic("config.yaml 中 admin_key 不能为空")
+	}
+	if cfg.Server.Port == 0 {
+		cfg.Server.Port = 8080
+	}
+}
+
+var jwtSecret []byte
+var adminKey string
 
 // ── 数据库 ───────────────────────────────────────────────────
 
@@ -154,10 +179,10 @@ func handleLogin(c *gin.Context) {
 		return
 	}
 	var (
-		id       int64
-		hash     string
-		isPro    int
-		email    string
+		id    int64
+		hash  string
+		isPro int
+		email string
 	)
 	err := db.QueryRow(
 		`SELECT id, email, password, is_pro FROM users WHERE email = ?`,
@@ -224,6 +249,10 @@ func handleSetPro(c *gin.Context) {
 // ── Main ─────────────────────────────────────────────────────
 
 func main() {
+	loadConfig("config.yaml")
+	jwtSecret = []byte(cfg.JWTSecret)
+	adminKey = cfg.AdminKey
+
 	initDB()
 
 	r := gin.Default()
@@ -245,6 +274,5 @@ func main() {
 	r.GET("/api/me", authMiddleware(), handleMe)
 	r.POST("/api/admin/set-pro", handleSetPro)
 
-	port := getEnv("PORT", "8080")
-	r.Run(":" + port)
+	r.Run(fmt.Sprintf(":%d", cfg.Server.Port))
 }
