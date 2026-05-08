@@ -86,7 +86,37 @@ func parseToken(tokenStr string) (*Claims, error) {
 	return claims, nil
 }
 
-// ── 工具 ──────────────────────────────────────────────────────
+// ── i18n ──────────────────────────────────────────────────────
+
+var messages = map[string][2]string{
+	"method_not_allowed": {"method not allowed", "请求方法不允许"},
+	"bad_request":        {"invalid request format", "请求格式有误"},
+	"invalid_email_pass": {"invalid email or password format", "邮箱或密码格式有误"},
+	"server_error":       {"internal server error", "服务器错误"},
+	"email_exists":       {"email already registered", "该邮箱已注册"},
+	"wrong_credentials":  {"incorrect email or password", "邮箱或密码错误"},
+	"unauthorized":       {"unauthorized", "未登录"},
+	"invalid_token":      {"invalid or expired token", "Token 无效或已过期"},
+	"user_not_found":     {"user not found", "用户不存在"},
+	"forbidden":          {"forbidden", "无权限"},
+	"bad_params":         {"invalid parameters", "参数有误"},
+}
+
+func t(r *http.Request, key string) string {
+	lang := r.Header.Get("Accept-Language")
+	isCN := strings.Contains(lang, "zh")
+	msg, ok := messages[key]
+	if !ok {
+		if isCN {
+			return key
+		}
+		return key
+	}
+	if isCN {
+		return msg[1]
+	}
+	return msg[0]
+}
 
 func mustEnv(key string) string {
 	v := os.Getenv(key)
@@ -131,7 +161,7 @@ func bearerToken(r *http.Request) string {
 
 func handleRegister(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		writeErr(w, http.StatusMethodNotAllowed, "method not allowed")
+		writeErr(w, http.StatusMethodNotAllowed, t(r, "method_not_allowed"))
 		return
 	}
 	var body struct {
@@ -139,17 +169,17 @@ func handleRegister(w http.ResponseWriter, r *http.Request) {
 		Password string `json:"password"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeErr(w, http.StatusBadRequest, "请求格式有误")
+		writeErr(w, http.StatusBadRequest, t(r, "bad_request"))
 		return
 	}
 	body.Email = strings.ToLower(strings.TrimSpace(body.Email))
 	if body.Email == "" || len(body.Password) < 6 {
-		writeErr(w, http.StatusBadRequest, "邮箱或密码格式有误")
+		writeErr(w, http.StatusBadRequest, t(r, "invalid_email_pass"))
 		return
 	}
 	hash, err := bcrypt.GenerateFromPassword([]byte(body.Password), bcrypt.DefaultCost)
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, "服务器错误")
+		writeErr(w, http.StatusInternalServerError, t(r, "server_error"))
 		return
 	}
 	var id int64
@@ -159,15 +189,15 @@ func handleRegister(w http.ResponseWriter, r *http.Request) {
 	).Scan(&id)
 	if err != nil {
 		if strings.Contains(err.Error(), "unique") || strings.Contains(err.Error(), "duplicate") {
-			writeErr(w, http.StatusConflict, "该邮箱已注册")
+			writeErr(w, http.StatusConflict, t(r, "email_exists"))
 			return
 		}
-		writeErr(w, http.StatusInternalServerError, "服务器错误")
+		writeErr(w, http.StatusInternalServerError, t(r, "server_error"))
 		return
 	}
 	token, err := signToken(id, body.Email)
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, "服务器错误")
+		writeErr(w, http.StatusInternalServerError, t(r, "server_error"))
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"token": token, "email": body.Email, "is_pro": false})
@@ -175,7 +205,7 @@ func handleRegister(w http.ResponseWriter, r *http.Request) {
 
 func handleLogin(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		writeErr(w, http.StatusMethodNotAllowed, "method not allowed")
+		writeErr(w, http.StatusMethodNotAllowed, t(r, "method_not_allowed"))
 		return
 	}
 	var body struct {
@@ -183,7 +213,7 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 		Password string `json:"password"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeErr(w, http.StatusBadRequest, "请求格式有误")
+		writeErr(w, http.StatusBadRequest, t(r, "bad_request"))
 		return
 	}
 	body.Email = strings.ToLower(strings.TrimSpace(body.Email))
@@ -197,16 +227,16 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 		`SELECT id, email, password, is_pro FROM users WHERE email = $1`, body.Email,
 	).Scan(&id, &email, &hash, &isPro)
 	if err != nil {
-		writeErr(w, http.StatusUnauthorized, "邮箱或密码错误")
+		writeErr(w, http.StatusUnauthorized, t(r, "wrong_credentials"))
 		return
 	}
 	if err := bcrypt.CompareHashAndPassword([]byte(hash), []byte(body.Password)); err != nil {
-		writeErr(w, http.StatusUnauthorized, "邮箱或密码错误")
+		writeErr(w, http.StatusUnauthorized, t(r, "wrong_credentials"))
 		return
 	}
 	token, err := signToken(id, email)
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, "服务器错误")
+		writeErr(w, http.StatusInternalServerError, t(r, "server_error"))
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"token": token, "email": email, "is_pro": isPro})
@@ -214,17 +244,17 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 
 func handleMe(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
-		writeErr(w, http.StatusMethodNotAllowed, "method not allowed")
+		writeErr(w, http.StatusMethodNotAllowed, t(r, "method_not_allowed"))
 		return
 	}
 	token := bearerToken(r)
 	if token == "" {
-		writeErr(w, http.StatusUnauthorized, "未登录")
+		writeErr(w, http.StatusUnauthorized, t(r, "unauthorized"))
 		return
 	}
 	claims, err := parseToken(token)
 	if err != nil {
-		writeErr(w, http.StatusUnauthorized, "Token 无效或已过期")
+		writeErr(w, http.StatusUnauthorized, t(r, "invalid_token"))
 		return
 	}
 	var isPro bool
@@ -232,7 +262,7 @@ func handleMe(w http.ResponseWriter, r *http.Request) {
 		`SELECT is_pro FROM users WHERE id = $1`, claims.UserID,
 	).Scan(&isPro)
 	if err != nil {
-		writeErr(w, http.StatusNotFound, "用户不存在")
+		writeErr(w, http.StatusNotFound, t(r, "user_not_found"))
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"email": claims.Email, "is_pro": isPro})
@@ -240,12 +270,12 @@ func handleMe(w http.ResponseWriter, r *http.Request) {
 
 func handleSetPro(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		writeErr(w, http.StatusMethodNotAllowed, "method not allowed")
+		writeErr(w, http.StatusMethodNotAllowed, t(r, "method_not_allowed"))
 		return
 	}
 	adminKey := os.Getenv("ADMIN_KEY")
 	if adminKey == "" || r.Header.Get("X-Admin-Key") != adminKey {
-		writeErr(w, http.StatusForbidden, "无权限")
+		writeErr(w, http.StatusForbidden, t(r, "forbidden"))
 		return
 	}
 	var body struct {
@@ -253,18 +283,18 @@ func handleSetPro(w http.ResponseWriter, r *http.Request) {
 		IsPro bool   `json:"is_pro"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Email == "" {
-		writeErr(w, http.StatusBadRequest, "参数有误")
+		writeErr(w, http.StatusBadRequest, t(r, "bad_params"))
 		return
 	}
 	tag, err := db().Exec(context.Background(),
 		`UPDATE users SET is_pro = $1 WHERE email = $2`, body.IsPro, strings.ToLower(body.Email),
 	)
 	if err != nil {
-		writeErr(w, http.StatusInternalServerError, "服务器错误")
+		writeErr(w, http.StatusInternalServerError, t(r, "server_error"))
 		return
 	}
 	if tag.RowsAffected() == 0 {
-		writeErr(w, http.StatusNotFound, "用户不存在")
+		writeErr(w, http.StatusNotFound, t(r, "user_not_found"))
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
