@@ -1,9 +1,5 @@
 {
-  "functions": {
-    "api/**/*.go": {
-      "runtime": "vercel-go@3.6.0"
-    }
-  },
+  "framework": "go",
   "routes": [
     { "src": "/api/admin/set-pro", "dest": "/api/admin/set_pro.go" },
     { "src": "/api/register",      "dest": "/api/register.go" },
