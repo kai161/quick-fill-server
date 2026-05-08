@@ -1,8 +1,3 @@
 {
-  "rewrites": [
-    { "source": "/api/admin/set-pro", "destination": "/api/admin/set_pro.go" },
-    { "source": "/api/register",      "destination": "/api/register.go" },
-    { "source": "/api/login",         "destination": "/api/login.go" },
-    { "source": "/api/me",            "destination": "/api/me.go" }
-  ]
+  "framework": "go"
 }
