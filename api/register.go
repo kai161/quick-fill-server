@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	shared "quick-fill-server/api/shared"
+	shared "quick-fill-server/shared"
 
 	"golang.org/x/crypto/bcrypt"
 )

@@ -4,7 +4,7 @@ import (
 	"context"
 	"net/http"
 
-	shared "quick-fill-server/api/shared"
+	shared "quick-fill-server/shared"
 )
 
 func Handler(w http.ResponseWriter, r *http.Request) {
